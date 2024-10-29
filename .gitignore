@@ -1,0 +1,5 @@
+__pycache__/
+logs/app.log
+my_app.lock
+subx/
+.DS_Store
