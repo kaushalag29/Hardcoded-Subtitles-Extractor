@@ -68,13 +68,4 @@ def run_cleanup():
         except Exception as e:
             logger.error("Failed to delete %s: %s", item, e)
 
-    # Removing JSON files
-    json_files = glob.glob("*.json")
-    for json_file in json_files:
-        try:
-            os.remove(json_file)
-            logger.info("Deleted JSON file: %s", json_file)
-        except Exception as e:
-            logger.error("Failed to delete JSON file %s: %s", json_file, e)
-
     logger.info("Cleaned up successfully")
