@@ -7,7 +7,7 @@ import sys
 import re
 from pathlib import Path
 import srt
-import google.generativeai as genai
+from openai import OpenAI
 
 def split_dict_into_batches(big_dict, min_batch_size=90, max_batch_size=120):
     batch = {}
@@ -37,33 +37,14 @@ def split_dict_into_batches(big_dict, min_batch_size=90, max_batch_size=120):
 
 def get_corrected_subtitles(ocr_subs_dict):
     final_ocr_subs_dict = {}
-    genai.configure(api_key=os.environ.get('GOOGLE_API_KEY'))
-    safe = [
-        {
-            "category": "HARM_CATEGORY_HARASSMENT",
-            "threshold": "BLOCK_NONE",
-        },
-        {
-            "category": "HARM_CATEGORY_HATE_SPEECH",
-            "threshold": "BLOCK_NONE",
-        },
-        {
-            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            "threshold": "BLOCK_NONE",
-        },
-        {
-            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-            "threshold": "BLOCK_NONE",
-        },
-    ]
-    model = genai.GenerativeModel('gemini-1.5-flash-001', safety_settings=safe)
+    client = os.getenv['OPEN_AI_KEY']
     batches = list(split_dict_into_batches(ocr_subs_dict))
     for _, batch in enumerate(batches):
         # Used Open AI to take subtitle dict as input prompt and return back the corrected subtitles based on text prompt
         ocr_subs_str = json.dumps(batch, default=str)
         text_query = """The above is the JSON content containing subtitle lines corresponding to each time frame number for a video. The goal is to refactor the content so that time frames with similar (by words or meaning) subtitles need to be matched word by word by choosing the best subtitle line among the similar ones.  We should make minimal word changes to make the best line and try to avoid doing that. Replace any non-English sentences as empty strings "\\n" while retaining the time frames. The final output should be a JSON containing all time frames with consistent consecutive subtitles.
 
-    Very stirctly don't include any line from below given Examples subtitles if the input subtitle line is different or not found. Consider only input JSON content and final output should contain lines from input JSON content only and not from below examples. The number of keys in the output should be strictly exactly same as above provided input json content. Don't translate the language.
+    Very stirctly don't include any line from below given Examples subtitles if the input subtitle line is different or not found. Consider only input JSON content and final output should contain lines from input JSON content only and not from below examples. The number of keys in the output should be strictly exactly same as above provided input json content. Don't translate the language. Also, strictly remove any kind of advertisement subtitle lines (specially in upper case characters) like NETFLIX, CRUNCHYROLL, SUBSCRIBE, K-CONTENT, etc with empty string "\n". If two consecutive subtitle lines seems to be similar, make them same by analyzing the context.
 
     Some Examples:
 
@@ -153,10 +134,20 @@ def get_corrected_subtitles(ocr_subs_dict):
     """
         prompt = "{}\n\n{}".format(ocr_subs_str, text_query)
         print("Fixing subtitles with Open AI")
-        response = model.generate_content(prompt)
-        print(response.text)
+        response = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            model="gpt-4o",
+            n=1
+        )
+        content = response.choices[0].message.content
+        print(content)
         pattern = r'\{.*?\}'
-        match = re.search(pattern, response.text, re.DOTALL)
+        match = re.search(pattern, content, re.DOTALL)
         if match:
             json_str = match.group(0)
             try:
@@ -173,6 +164,8 @@ def get_corrected_subtitles(ocr_subs_dict):
 def generate_srt(json_input_file=None, json_upper_input_file=None):
     with open(json_input_file, "r") as f:
         ocr_dict: dict = json.load(f)
+    ocr_dict = get_corrected_subtitles(ocr_dict)
+    # Intentionally invoking it again to correct subtitles
     ocr_dict = get_corrected_subtitles(ocr_dict)
     with open("correct_subs.json", "w+") as f:
         json.dump(ocr_dict, f, default=str, indent=4)
