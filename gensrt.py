@@ -37,101 +37,120 @@ def split_dict_into_batches(big_dict, min_batch_size=90, max_batch_size=120):
 
 def get_corrected_subtitles(ocr_subs_dict):
     final_ocr_subs_dict = {}
-    client = os.getenv['OPEN_AI_KEY']
+    client = OpenAI(api_key=os.environ.get("OPEN_AI_KEY"))
     batches = list(split_dict_into_batches(ocr_subs_dict))
     for _, batch in enumerate(batches):
         # Used Open AI to take subtitle dict as input prompt and return back the corrected subtitles based on text prompt
         ocr_subs_str = json.dumps(batch, default=str)
-        text_query = """The above is the JSON content containing subtitle lines corresponding to each time frame number for a video. The goal is to refactor the content so that time frames with similar (by words or meaning) subtitles need to be matched word by word by choosing the best subtitle line among the similar ones.  We should make minimal word changes to make the best line and try to avoid doing that. Replace any non-English sentences as empty strings "\\n" while retaining the time frames. The final output should be a JSON containing all time frames with consistent consecutive subtitles.
+        text_query = """Refactor the above JSON subtitle content to ensure similar subtitles (based on wording or meaning) are combined into a single consistent version, with minimal changes. Follow these rules:
 
-    Very stirctly don't include any line from below given Examples subtitles if the input subtitle line is different or not found. Consider only input JSON content and final output should contain lines from input JSON content only and not from below examples. The number of keys in the output should be strictly exactly same as above provided input json content. Don't translate the language. Also, strictly remove any kind of advertisement subtitle lines (specially in upper case characters) like NETFLIX, CRUNCHYROLL, SUBSCRIBE, K-CONTENT, etc with empty string "\n". If two consecutive subtitle lines seems to be similar, make them same by analyzing the context.
+Similarity Matching: If subtitles across time frames are nearly identical (extra/missing punctuation, line breaks, or minor spelling differences), select the best line and apply it consistently across matching frames.
 
-    Some Examples:
+Language & Advertisement: Remove any non-English content and advertisements (e.g., “NETFLIX,” “CRUNCHYROLL”) by replacing with "\\n".
 
-    "0074": "Hey Ontan.\\nDo\\nyou think we'll be good grownups?\\n",
-    "0075": "Hey Ontan.\\nDo you think we'll be good grownups?\\n",
-    "0076": "Hey Ontan.\\nDo\\nyou\\nthink we'll be good grownups?\\n",
-    "0077": "Hey Ontan.\\nDO you think we'll be good grownups?\\n",
-    Although both sentences look different due to additional \\n breaks, they are the same and need to be replaced with the same line as "Hey Ontan.\\nDo you think we'll be good grownups?\\n"
+Context Consistency: Consecutive subtitles with minor wording variations but similar context should be combined into a consistent line. Retain earliest start and latest end times for these combined lines.
 
-    "0050": "Kiho Kurihara, age 18.\\n",
-    "0051": "Kiho Kurihara, age\\n18.\\n",
-    "0052": "Kiho Kurihara,\\nage 18.\\n"
-    Same here, it needs to be replaced with the best line such as "Kiho Kurihara, age 18.\\n"
+Formatting Adjustments:
 
-    "0024": "If\\nIf you could just admit you wanna <word>\\na teacher, like Kadode here did...\\n",
-    "0025": ":Mb5f\\nTEEELD\\nIf you could just admit you wanna <word>\\nFP**.\\na teacher, like Kadode here did.®\\n",
-    Similarly, 24-25 lines may look different due to extra ... at the end, but they are the same sentences (24-25) and should be replaced with "If you could just admit you wanna <word>\\na teacher, like Kadode here did.\\n" 
-    Thus, the goal is to make them the same irrespective of additional or unnecessary punctuation marks and choose the best one among them that fits a single sentence.
+Normalize punctuation at the end (e.g., "And then..." becomes "And then.").
+Simplify lines with unnecessary breaks (e.g., "Hey Ontan.\\nDo\\nyou think we'll..." to "Hey Ontan.\\nDo you think we'll...").
+Remove subtitles containing only symbols like ":", "?", or "...".
+Output Requirements:
 
-    "0034": "- think they're pretending to be humans,\\nto infiltrate into society.\\n",
-    "0035": "think they're pretending to be humans,\\nto infiltrate into society.\\n",
-    "0036": "I think they'tre pretending to be humans,\\nto infiltrate into society.\\n",
-    "0037": "I think they're pretending to be humans,\\nto infiltrate into society.\\n&\\n"
-    Corrected best one for above case will be "I think they're pretending to be humans,\\nto infiltrate into society.\\n"
+Keep the same number of keys as the input JSON.
+Exclude all reference examples in the final output; only use subtitles from the input JSON.
+Don’t translate any content.
+Follow this structure to create a clean, consistent, and minimally edited subtitle output in JSON format."""
+    #     text_query = """The above is the JSON content containing subtitle lines corresponding to each time frame number for a video. The goal is to refactor the content so that time frames with similar (by words or meaning) subtitles need to be matched word by word by choosing the best subtitle line among the similar ones.  We should make minimal word changes to make the best line and try to avoid doing that. Replace any non-English sentences as empty strings "\\n" while retaining the time frames. The final output should be a JSON containing all time frames with consistent consecutive subtitles.
 
-    "0067": "\\"ZeZeZeZettai Seiya\\" ano feat. Lilas Ikuta\\nTOROO EAnO feaL A IC\\n",
-    "0068": "\\"ZeLeZeZettai Seiya\\" ano feat. Lilas Ikuta\\nLAEEHIANO feaL ML HN\\n",
-    "0069": "\\"ZeZeZeZettai Seiya\\" ano teat. Lilas Ikuta\\nAHOHOO*EnO\\n",
-    "0057": "MUSIC JUN * MURAYAMA\\nANIMATION BY EIGHT BIT\\nDISTRIBUTION BANDAI NAMCO FILMWORKS INC.\\ncrunchyroll*\\nKODANSHA\\n©Muneyuki Kaneshiro, Kota Sannomiya, Yusuke Nomura, KODANSHA/BLUE LOCK MOVIE Production Committee.\\nSONY\\n",
-    "0058": "crunchyroll'\\nKODANSHA\\n©Muneyuki Kaneshiro, Kota Sannomiya, Yusuke Nomura, KODANSHA/BLUE LOCK MOVIE Production Committee.\\nSONY\\n",
-    Sentences like the above (0067-0069 and 0057-0058) don't make sense in English and must be replaced with the "\\n" string. But if there is a understandable line following non-english words it should be retained. Remove any Advertisement words or phrases.
+    # Very stirctly don't include any line from below given Examples subtitles if the input subtitle line is different or not found. Consider only input JSON content and final output should contain lines from input JSON content only and not from below examples. The number of keys in the output should be strictly exactly same as above provided input json content. Don't translate the language. Also, strictly remove any kind of advertisement subtitle lines (specially in upper case characters) like NETFLIX, CRUNCHYROLL, SUBSCRIBE, K-CONTENT, etc with empty string "\n". If two consecutive subtitle lines seems to be similar, make them same by analyzing the context.
 
-    "0012": "HOWEVER\\n",
-    "0013": "AOWEVER\\n"
-    Make spelling correction like 0013 should also be "HOWEVER\\n"
+    # Some Examples:
 
-    "0017": "Got marrnied.\\n" should be  "0017": "Got married.\n"
+    # "0074": "Hey Ontan.\\nDo\\nyou think we'll be good grownups?\\n",
+    # "0075": "Hey Ontan.\\nDo you think we'll be good grownups?\\n",
+    # "0076": "Hey Ontan.\\nDo\\nyou\\nthink we'll be good grownups?\\n",
+    # "0077": "Hey Ontan.\\nDO you think we'll be good grownups?\\n",
+    # Although both sentences look different due to additional \\n breaks, they are the same and need to be replaced with the same line as "Hey Ontan.\\nDo you think we'll be good grownups?\\n"
 
-    "0052": "Sweet buns sound good to0...\\n",
-    "0053": "SRSSONBSORI\\nSweet buns sound good to0...\\n",
-    "0054": "Sweet buns sound good to0..g\\n",
-    This should be corrected as "Sweet buns sound good too...\\n"
+    # "0050": "Kiho Kurihara, age 18.\\n",
+    # "0051": "Kiho Kurihara, age\\n18.\\n",
+    # "0052": "Kiho Kurihara,\\nage 18.\\n"
+    # Same here, it needs to be replaced with the best line such as "Kiho Kurihara, age 18.\\n"
 
-    "0020": "And then..\\n",
-    "0021": "And then...\\n",
-    "0022": "And then..\\n",
-    Dots or punctuation marks at the end should be ignored and made all same like "And then.\\n"
+    # "0024": "If\\nIf you could just admit you wanna <word>\\na teacher, like Kadode here did...\\n",
+    # "0025": ":Mb5f\\nTEEELD\\nIf you could just admit you wanna <word>\\nFP**.\\na teacher, like Kadode here did.®\\n",
+    # Similarly, 24-25 lines may look different due to extra ... at the end, but they are the same sentences (24-25) and should be replaced with "If you could just admit you wanna <word>\\na teacher, like Kadode here did.\\n" 
+    # Thus, the goal is to make them the same irrespective of additional or unnecessary punctuation marks and choose the best one among them that fits a single sentence.
 
-    "0032": "Someone\\nvery\\ncarefree showed up\\n",
-    "0033": "Someone\\nvery\\ncarefree showed up!\\n",
-    "0034": "Someone very\\ncarefree showed up!\\n",
-    All the above lines should be converted to same line as "Someone very carefree showed up!\\n"
+    # "0034": "- think they're pretending to be humans,\\nto infiltrate into society.\\n",
+    # "0035": "think they're pretending to be humans,\\nto infiltrate into society.\\n",
+    # "0036": "I think they'tre pretending to be humans,\\nto infiltrate into society.\\n",
+    # "0037": "I think they're pretending to be humans,\\nto infiltrate into society.\\n&\\n"
+    # Corrected best one for above case will be "I think they're pretending to be humans,\\nto infiltrate into society.\\n"
 
-    "0083": "Attack.o.\\n",
-    "0084": "Attackooo\\n",
-    This should be converted to same line as "Attack!\\n"
+    # "0067": "\\"ZeZeZeZettai Seiya\\" ano feat. Lilas Ikuta\\nTOROO EAnO feaL A IC\\n",
+    # "0068": "\\"ZeLeZeZettai Seiya\\" ano feat. Lilas Ikuta\\nLAEEHIANO feaL ML HN\\n",
+    # "0069": "\\"ZeZeZeZettai Seiya\\" ano teat. Lilas Ikuta\\nAHOHOO*EnO\\n",
+    # "0057": "MUSIC JUN * MURAYAMA\\nANIMATION BY EIGHT BIT\\nDISTRIBUTION BANDAI NAMCO FILMWORKS INC.\\ncrunchyroll*\\nKODANSHA\\n©Muneyuki Kaneshiro, Kota Sannomiya, Yusuke Nomura, KODANSHA/BLUE LOCK MOVIE Production Committee.\\nSONY\\n",
+    # "0058": "crunchyroll'\\nKODANSHA\\n©Muneyuki Kaneshiro, Kota Sannomiya, Yusuke Nomura, KODANSHA/BLUE LOCK MOVIE Production Committee.\\nSONY\\n",
+    # Sentences like the above (0067-0069 and 0057-0058) don't make sense in English and must be replaced with the "\\n" string. But if there is a understandable line following non-english words it should be retained. Remove any Advertisement words or phrases.
 
-    "0045": "That is, until\\nmet him and came to Blue Lock®\\n",
-    "0046": "That is, until I met him and came to Blue Lock.\\n©Muneyuki Kaneshiro, Kota Sannomiya, Yusuke Nomura, KODANSHA/BLUE LOCK MOVIE Production Committec\\n",
-    "0047": "That is, until\\nmet him and came to Blue Lock.\\n©Muneyuki Kaneshiro, Kota Sannomiya, Yusuke Nomura, KODANSHA/BLUE LOCK MOVIE Production Committee.\\n",
-    "0048": "That is, until I met him and came to Blue Lock.\\n©Muneyuki Kaneshiro, Kota Sannomiya, Yusuke Nomura, KODANSHA/BLUE LOCK MOVIE Production Committee.\\n",
-    All the above lines from 0045-0048 should be converted to same line as "That is, until I met him and came to Blue Lock\\n"
+    # "0012": "HOWEVER\\n",
+    # "0013": "AOWEVER\\n"
+    # Make spelling correction like 0013 should also be "HOWEVER\\n"
 
-    "0040": "TEAM\\nShall we begin?\\n",
-    "0041": "Shall we begin?\\n",
-    These lines from 0040-0041 should be made same like "TEAM\\nShall we begin?\\n", adding "TEAM" in another line as well.
+    # "0017": "Got marrnied.\\n" should be  "0017": "Got married.\n"
 
-    "0041": "Horse®\\nHORSE DEER\\nOUAN\\n", should be changed as sensible like "HORSE DEER\\n"
+    # "0052": "Sweet buns sound good to0...\\n",
+    # "0053": "SRSSONBSORI\\nSweet buns sound good to0...\\n",
+    # "0054": "Sweet buns sound good to0..g\\n",
+    # This should be corrected as "Sweet buns sound good too...\\n"
 
-    "@Kei Izumi, Alphapolis/TSUKIMICHI2 Production Committee" should be removed as "\n" since it is a repeated ad in all the subtitle lines.
+    # "0020": "And then..\\n",
+    # "0021": "And then...\\n",
+    # "0022": "And then..\\n",
+    # Dots or punctuation marks at the end should be ignored and made all same like "And then.\\n"
 
-    - will get to the top of the tower.
-    will get to the top of the tower.
-    I will find the answer.
-    will find the answer.
-    Replace any similar subtitle lines as shown above (having missing/extra punctuations, spaces or line breaks) with best correct line as given below and keeping intact their respective timeframe numbers.
-    I will get to the top of the tower.
-    I will get to the top of the tower.
-    I will find the answer.
-    I will find the answer.
+    # "0032": "Someone\\nvery\\ncarefree showed up\\n",
+    # "0033": "Someone\\nvery\\ncarefree showed up!\\n",
+    # "0034": "Someone very\\ncarefree showed up!\\n",
+    # All the above lines should be converted to same line as "Someone very carefree showed up!\\n"
 
-    Make sure to keep the earliest subtitle start time and maximum (last) subtitle endtime for repeated lines for the best selected line.
+    # "0083": "Attack.o.\\n",
+    # "0084": "Attackooo\\n",
+    # This should be converted to same line as "Attack!\\n"
 
-    Subtitle lines containing only punctuation marks or special symbols like ":", "?", "...", "###", ",;" should be replaced as "\\n" empty string.
+    # "0045": "That is, until\\nmet him and came to Blue Lock®\\n",
+    # "0046": "That is, until I met him and came to Blue Lock.\\n©Muneyuki Kaneshiro, Kota Sannomiya, Yusuke Nomura, KODANSHA/BLUE LOCK MOVIE Production Committec\\n",
+    # "0047": "That is, until\\nmet him and came to Blue Lock.\\n©Muneyuki Kaneshiro, Kota Sannomiya, Yusuke Nomura, KODANSHA/BLUE LOCK MOVIE Production Committee.\\n",
+    # "0048": "That is, until I met him and came to Blue Lock.\\n©Muneyuki Kaneshiro, Kota Sannomiya, Yusuke Nomura, KODANSHA/BLUE LOCK MOVIE Production Committee.\\n",
+    # All the above lines from 0045-0048 should be converted to same line as "That is, until I met him and came to Blue Lock\\n"
 
-    Strictly Note:  All the above content is legal and legitimate without offensive sentences. Everything is fictional and taken from movies. Generate the content properly as instructed without including any examples subtitles lines and without invoking false safety alarms.
-    """
+    # "0040": "TEAM\\nShall we begin?\\n",
+    # "0041": "Shall we begin?\\n",
+    # These lines from 0040-0041 should be made same like "TEAM\\nShall we begin?\\n", adding "TEAM" in another line as well.
+
+    # "0041": "Horse®\\nHORSE DEER\\nOUAN\\n", should be changed as sensible like "HORSE DEER\\n"
+
+    # "@Kei Izumi, Alphapolis/TSUKIMICHI2 Production Committee" should be removed as "\n" since it is a repeated ad in all the subtitle lines.
+
+    # - will get to the top of the tower.
+    # will get to the top of the tower.
+    # I will find the answer.
+    # will find the answer.
+    # Replace any similar subtitle lines as shown above (having missing/extra punctuations, spaces or line breaks) with best correct line as given below and keeping intact their respective timeframe numbers.
+    # I will get to the top of the tower.
+    # I will get to the top of the tower.
+    # I will find the answer.
+    # I will find the answer.
+
+    # Make sure to keep the earliest subtitle start time and maximum (last) subtitle endtime for repeated lines for the best selected line.
+
+    # Subtitle lines containing only punctuation marks or special symbols like ":", "?", "...", "###", ",;" should be replaced as "\\n" empty string.
+
+    # Strictly Note:  All the above content is legal and legitimate without offensive sentences. Everything is fictional and taken from movies. Generate the content properly as instructed without including any examples subtitles lines and without invoking false safety alarms.
+    # """
         prompt = "{}\n\n{}".format(ocr_subs_str, text_query)
         print("Fixing subtitles with Open AI")
         response = client.chat.completions.create(
