@@ -1,5 +1,7 @@
 # AutoDub Subtitles Extractor
 
+[Demo Video](https://www.youtube.com/watch?v=kYSOKNY68mo)
+
 ## Inspiration
 The idea for AutoDub Subtitles Extractor sparked while watching foreign films and shows with embedded English subtitles. The constant need to follow text on the screen disrupted the viewing experience, and I thought, "What if subtitles could automatically be converted to audio?" This would eliminate the need for continuous reading and instead offer real-time audio dubs. While exploring popular media like Turkish dramas and Japanese anime, I noticed that many lack external subtitle (.srt) files, as subtitles are often embedded directly into the video. Without a separate subtitle file, creating a seamless dubbed audio track becomes a major challenge.
 
