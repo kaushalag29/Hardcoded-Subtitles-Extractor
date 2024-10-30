@@ -24,7 +24,7 @@ SUBS_CLEAN_REGEX = re.compile('<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});')
 class SubtitleExtractorApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Subtitle Extractor")
+        self.title("AutoDub Subtitles Extractor")
         self.geometry("800x600")
         self.current_frame = None
         self.switch_frame(SelectSourcePage)
