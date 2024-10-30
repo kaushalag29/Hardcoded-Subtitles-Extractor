@@ -1,4 +1,4 @@
-# Hardcoded-Subtitles-Extractor
+# AutoDub-Subtitles-Extractor
 
 ### Usage
 
