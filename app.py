@@ -71,19 +71,6 @@ class SubtitleOptionPage(tk.Frame):
     def extract_subtitles(self):
         self.master.switch_frame(LoadingPage, "Extracting subtitles...", EditSubtitlePage, "Extracted subtitles will appear here...")
 
-    def select_subtitle_file(self):
-        try:
-            subtitle_path = filedialog.askopenfilename(
-                filetypes=[("Subtitle files", "*.srt"), ("Subtitle files", "*.vtt")]
-            )
-            if subtitle_path:
-                with open(subtitle_path, 'r') as file:
-                    subtitles = file.read()
-                    cleaned_subtitles = re.sub(SUBS_CLEAN_REGEX, '', subtitles)
-                self.master.switch_frame(EditSubtitlePage, cleaned_subtitles)
-        except Exception as e:
-            messagebox.showerror("Error", f"An error occurred while selecting the subtitle file: {e}")
-
 class EditSubtitlePage(tk.Frame):
     def __init__(self, master, subtitles):
         super().__init__(master)
